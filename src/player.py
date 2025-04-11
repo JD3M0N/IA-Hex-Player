@@ -2,7 +2,7 @@ import numpy as np
 import random
 import math
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .board import HexBoard
 
 class Player:
@@ -54,7 +54,181 @@ class ManualPlayer(Player):
             except ValueError:
                 print("Entrada inválida. Por favor, ingresa números enteros.")
 
+
+class MCTSNode:
+    def __init__(self, board: HexBoard, parent, move: tuple, player_turn: int):
+        """
+        :param board: Estado del tablero en este nodo.
+        :param parent: Nodo padre.
+        :param move: Movimiento que llevó a este nodo (None para la raíz).
+        :param player_turn: El jugador que tiene el turno en este nodo.
+        """
+        self.board = board
+        self.parent = parent
+        self.move = move
+        self.player_turn = player_turn  # Quién mueve en este nodo
+        self.children = []
+        self.untried_moves = board.get_possible_moves()  # Movimientos aún no explorados
+        self.visits = 0
+        self.wins = 0.0
+
+    def is_terminal(self):
+        # Un nodo es terminal si algún jugador ha ganado o no hay más movimientos.
+        return self.board.check_connection(1) or self.board.check_connection(2) or (len(self.untried_moves) == 0)
+
+    def is_fully_expanded(self):
+        return len(self.untried_moves) == 0
+
+    def add_child(self, child_node):
+        self.children.append(child_node)
+        if child_node.move in self.untried_moves:
+            self.untried_moves.remove(child_node.move)
+
+    def best_child(self, c_param):
+        best_score = float('-inf')
+        best_node = None
+        for child in self.children:
+            # Si el hijo no ha sido visitado, le damos prioridad
+            if child.visits == 0:
+                score = float('inf')
+            else:
+                # Puntuación UCT: media de victorias + bonus de exploración
+                score = (child.wins / child.visits) + c_param * math.sqrt(math.log(self.visits) / child.visits)
+            if score > best_score:
+                best_score = score
+                best_node = child
+        return best_node
+
+    def __repr__(self):
+        return f"MCTSNode(move={self.move}, visits={self.visits}, wins={self.wins}, untried_moves={len(self.untried_moves)})"
+
+
 class IAPlayer(Player):
+    def __init__(self, player_id: int, time_limit: float = 1.0, c_param: float = 1.4, parallel_rollouts: bool = True, num_threads: int = 4):
+        """
+        :param player_id: Identificador del jugador (1 o 2).
+        :param time_limit: Tiempo (en segundos) asignado a la búsqueda MCTS.
+        :param c_param: Constante de exploración en la fórmula UCT.
+        :param parallel_rollouts: Si True, se ejecutarán rollouts en paralelo.
+        :param num_threads: Número de hilos a usar en paralelización.
+        """
+        super().__init__(player_id)
+        self.time_limit = time_limit
+        self.c_param = c_param
+        self.parallel_rollouts = parallel_rollouts
+        self.num_threads = num_threads
+        self.opponent_id = 3 - player_id
+        self.root = None  # Raíz del árbol MCTS
+
+    def play(self, board: HexBoard, possible_moves) -> tuple:
+        # Reutiliza el árbol si es posible
+        if self.root is not None:
+            self.root = self._reuse_tree(self.root, board)
+        else:
+            self.root = MCTSNode(board=board.clone(), parent=None, move=None, player_turn=self.player_id)
+
+        end_time = time.time() + self.time_limit
+
+        if self.parallel_rollouts:
+            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                futures = []
+                while time.time() < end_time:
+                    node = self._tree_policy(self.root)
+                    futures.append(executor.submit(self._default_policy, node))
+                    if len(futures) >= self.num_threads:
+                        for future in as_completed(futures):
+                            result = future.result()
+                            self._backup(node, result)
+                        futures = []
+                for future in as_completed(futures):
+                    result = future.result()
+                    self._backup(node, result)
+        else:
+            while time.time() < end_time:
+                node = self._tree_policy(self.root)
+                result = self._default_policy(node)
+                self._backup(node, result)
+
+        if self.root.children:
+            best_child = max(self.root.children, key=lambda child: child.visits)
+        else:
+            best_child = None
+
+        if best_child is None:
+            # Por seguridad, si no hay nodos hijos, se elige un movimiento aleatorio
+            return random.choice(possible_moves)
+
+        # Se actualiza la raíz para el siguiente turno
+        self.root = best_child
+        self.root.parent = None
+        return best_child.move
+
+    def _tree_policy(self, node: MCTSNode) -> MCTSNode:
+        """
+        Recorre el árbol usando la estrategia UCT hasta llegar a un nodo que no esté completamente expandido
+        o a uno terminal.
+        """
+        while not node.is_terminal():
+            if not node.is_fully_expanded():
+                return self._expand(node)
+            else:
+                node = node.best_child(self.c_param)
+        return node
+
+    def _expand(self, node: MCTSNode) -> MCTSNode:
+        """
+        Expande el nodo probando uno de los movimientos no explorados.
+        """
+        move = random.choice(node.untried_moves)
+        new_board = node.board.clone()
+        new_board.place_piece(move[0], move[1], node.player_turn)
+        next_player = 3 - node.player_turn
+        child = MCTSNode(board=new_board, parent=node, move=move, player_turn=next_player)
+        node.add_child(child)
+        return child
+
+    def _default_policy(self, node: MCTSNode) -> int:
+        """
+        Simulación (rollout) desde el nodo dado. Se juega de forma aleatoria hasta terminar el juego.
+        Retorna 1 si gana la IA, -1 si gana el oponente, o 0 en caso de empate.
+        """
+        board_clone = node.board.clone()
+        current_player = node.player_turn
+        while True:
+            if board_clone.check_connection(self.player_id):
+                return 1
+            if board_clone.check_connection(self.opponent_id):
+                return -1
+            moves = board_clone.get_possible_moves()
+            if not moves:
+                return 0
+            move = random.choice(moves)
+            board_clone.place_piece(move[0], move[1], current_player)
+            current_player = 3 - current_player
+
+    def _backup(self, node: MCTSNode, result: int):
+        """
+        Retropropagación de la simulación: se actualizan visitas y victorias en cada nodo hasta la raíz.
+        Se invierte el resultado en cada nivel (operador de min-max típico en MCTS).
+        """
+        while node is not None:
+            node.visits += 1
+            node.wins += result
+            result = -result
+            node = node.parent
+
+    def _reuse_tree(self, old_root: MCTSNode, current_board: HexBoard) -> MCTSNode:
+        """
+        Intenta encontrar en los hijos del nodo raíz uno que corresponda al estado actual.
+        Si no se encuentra, se crea un nuevo nodo raíz.
+        """
+        for child in old_root.children:
+            if child.board.board == current_board.board:
+                return child
+        return MCTSNode(board=current_board.clone(), parent=None, move=None, player_turn=self.player_id)
+
+
+class IAPlayer3(Player):
     def __init__(self, player_id: int, time_limit: float = 0.9, c_param: float = 1.4):
         super().__init__(player_id)
         self.time_limit = time_limit
@@ -753,27 +927,28 @@ class IAPlayer2(Player):
         
         return player_center_ratio - opponent_center_ratio
 
-class MCTSNode:
-    def __init__(self, board, parent, move, player_id=None):
-        self.board = board
-        self.parent = parent
-        self.move = move  # El movimiento que llevó a este nodo
-        self.player_id = player_id  # ID del jugador que debe mover
-        self.children = []
-        self.tried_moves = set()
-        self.visits = 0
-        self.wins = 0
+#Implementacion para IAPlayer2
+# class MCTSNode:
+#     def __init__(self, board, parent, move, player_id=None):
+#         self.board = board
+#         self.parent = parent
+#         self.move = move  # El movimiento que llevó a este nodo
+#         self.player_id = player_id  # ID del jugador que debe mover
+#         self.children = []
+#         self.tried_moves = set()
+#         self.visits = 0
+#         self.wins = 0
         
-    def add_child(self, child, move):
-        self.children.append(child)
-        self.tried_moves.add(move)
+#     def add_child(self, child, move):
+#         self.children.append(child)
+#         self.tried_moves.add(move)
         
-    def is_terminal(self):
-        # Un nodo es terminal si el juego ha terminado
-        return (self.board.check_connection(1) or 
-                self.board.check_connection(2) or 
-                not self.board.get_possible_moves())
+#     def is_terminal(self):
+#         # Un nodo es terminal si el juego ha terminado
+#         return (self.board.check_connection(1) or 
+#                 self.board.check_connection(2) or 
+#                 not self.board.get_possible_moves())
                 
-    def is_fully_expanded(self):
-        possible_moves = self.board.get_possible_moves()
-        return len(self.tried_moves) == len(possible_moves)
+#     def is_fully_expanded(self):
+#         possible_moves = self.board.get_possible_moves()
+#         return len(self.tried_moves) == len(possible_moves)
