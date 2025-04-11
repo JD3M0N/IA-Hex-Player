@@ -1,14 +1,23 @@
 # console.py
-from board import HexBoard
-from player import ManualPlayer, IAPlayer
+from .board import HexBoard
+from .player import ManualPlayer, IAPlayer
+
+def display_board(board):
+    """
+    Muestra el tablero en formato de tablero HEX. 
+    Usa 'O' para las celdas vacías y aplica una indentación creciente por fila.
+    """
+    print("\nTablero actual:")
+    for i, row in enumerate(board.board):
+        # Para la primera fila, sin indent; para las demás, se incrementa la indentación
+        indent = " " * (i + 1) if i > 0 else ""
+        # Representa cada celda: 'O' si está vacía; de lo contrario, el valor (por ejemplo, 1 o 2)
+        line = " ".join("O" if cell == 0 else str(cell) for cell in row)
+        print(indent + line)
 
 def start_game(board_size=7, player1=None, player2=None):
     """
-    Función para iniciar el juego en consola.
-    
-    :param board_size: Tamaño del tablero (NxN).
-    :param player1: Instancia del jugador 1 (por defecto ManualPlayer).
-    :param player2: Instancia del jugador 2 (por defecto ManualPlayer).
+    Inicia el juego en consola.
     """
     if player1 is None:
         player1 = ManualPlayer(1)
@@ -20,10 +29,8 @@ def start_game(board_size=7, player1=None, player2=None):
     print("=== Comenzando el juego en consola ===")
     
     while True:
-        print("\nTablero actual:")
-        for row in board.board:
-            print(" ".join(str(cell) for cell in row))
-            
+        display_board(board)
+        
         moves = board.get_possible_moves()
         if not moves:
             print("¡Empate!")
@@ -32,6 +39,7 @@ def start_game(board_size=7, player1=None, player2=None):
         move = current_player.play(board.board, moves)
         if board.place_piece(move[0], move[1], current_player.player_id):
             if board.check_connection(current_player.player_id):
+                display_board(board)
                 print(f"¡Gana el jugador {current_player.player_id}!")
                 break
             # Alterna turno

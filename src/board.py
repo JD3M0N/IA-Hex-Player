@@ -43,41 +43,29 @@ class HexBoard:
         return moves
 
     def _get_neighbors(self, row: int, col: int) -> list:
-        """
-        Función auxiliar para obtener los vecinos válidos de una casilla (row, col)
-        según el sistema even-r:
-          - Filas pares (row % 2 == 0): vecinos izquierda, derecha, arriba, abajo,
-            arriba-derecha y abajo-derecha.
-          - Filas impares: vecinos izquierda, derecha, arriba, abajo,
-            arriba-izquierda y abajo-izquierda.
-        :param row: Índice de la fila.
-        :param col: Índice de la columna.
-        :return: Lista de vecinos (fila, columna) que están dentro de los límites del tablero.
-        """
-        if row % 2 == 0:
-            offsets = [
+            """
+            Devuelve la lista de vecinos utilizando las siguientes direcciones para cualquier (i, j):
+            - (0, -1)   → Izquierda
+            - (0, 1)    → Derecha
+            - (-1, 0)   → Arriba
+            - (1, 0)    → Abajo
+            - (-1, 1)   → Arriba derecha
+            - (1, -1)   → Abajo izquierda
+            """
+            directions = [
                 (0, -1),   # Izquierda
                 (0, 1),    # Derecha
                 (-1, 0),   # Arriba
                 (1, 0),    # Abajo
-                (-1, 1),   # Arriba-Derecha
-                (1, 1)     # Abajo-Derecha
+                (-1, 1),   # Arriba derecha
+                (1, -1)    # Abajo izquierda
             ]
-        else:
-            offsets = [
-                (0, -1),   # Izquierda
-                (0, 1),    # Derecha
-                (-1, 0),   # Arriba
-                (1, 0),    # Abajo
-                (-1, -1),  # Arriba-Izquierda
-                (1, -1)    # Abajo-Izquierda
-            ]
-        neighbors = []
-        for dr, dc in offsets:
-            r, c = row + dr, col + dc
-            if 0 <= r < self.size and 0 <= c < self.size:
-                neighbors.append((r, c))
-        return neighbors
+            neighbors = []
+            for dr, dc in directions:
+                r, c = row + dr, col + dc
+                if 0 <= r < self.size and 0 <= c < self.size:
+                    neighbors.append((r, c))
+            return neighbors
 
     def check_connection(self, player_id: int) -> bool:
         """
