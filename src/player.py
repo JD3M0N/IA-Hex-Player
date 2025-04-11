@@ -3,6 +3,8 @@ import random
 import math
 import time
 from concurrent.futures import ThreadPoolExecutor
+from .board import HexBoard
+
 class Player:
     def __init__(self, player_id: int):
         """
@@ -52,10 +54,121 @@ class ManualPlayer(Player):
             except ValueError:
                 print("Entrada inválida. Por favor, ingresa números enteros.")
 
-
-
 class IAPlayer(Player):
-    def __init__(self, player_id: int, time_limit: float = 0.9, method: str = "mcts"):
+    def __init__(self, player_id: int, time_limit: float = 0.9, c_param: float = 1.4):
+        super().__init__(player_id)
+        self.time_limit = time_limit
+        self.c_param = c_param  # Constante de exploración configurable
+        self.opponent_id = 3 - player_id
+        self.mcts_root = None  # Para persistir el árbol entre turnos
+
+    def play(self, board: HexBoard, possible_moves) -> tuple:
+        # Para integrar el tree reuse, actualiza el árbol si existe una raíz previa
+        if self.mcts_root is not None:
+            # Intenta encontrar el subárbol correspondiente al último movimiento del oponente,
+            # de lo contrario se reinicia el árbol.
+            self.mcts_root = self._reuse_tree(self.mcts_root, board)
+        else:
+            self.mcts_root = MCTSNode(board=board.clone(), parent=None, move=None, player_id=self.player_id)
+
+        end_time = time.time() + self.time_limit
+        # Ejecutar simulaciones desde la raíz hasta que se agote el tiempo:
+        while time.time() < end_time:
+            node = self._mcts_select(self.mcts_root)
+            if not node.is_terminal() and not node.is_fully_expanded():
+                node = self._mcts_expand(node)
+            result = self._mcts_simulate(node)
+            self._mcts_backpropagate(node, result)
+
+        # Seleccionar la mejor jugada basada en el número de visitas
+        best_child = max(self.mcts_root.children, key=lambda child: child.visits)
+        # Actualizar la raíz para el próximo turno:
+        self.mcts_root = best_child
+        self.mcts_root.parent = None
+        return best_child.move
+
+    def _best_uct_child(self, node):
+        best_score = float('-inf')
+        best_child = None
+        for child in node.children:
+            if child.visits == 0:
+                score = float('inf')
+            else:
+                exploit = child.wins / child.visits
+                explore = math.sqrt(math.log(node.visits) / child.visits)
+                score = exploit + self.c_param * explore
+            if score > best_score:
+                best_score = score
+                best_child = child
+        return best_child
+
+    # ... (mantén o ajusta los métodos _mcts_select, _mcts_expand, _mcts_simulate y _mcts_backpropagate)
+    
+    def _mcts_select(self, node):
+        while not node.is_terminal() and node.is_fully_expanded():
+            node = self._best_uct_child(node)
+        return node
+    
+    def _mcts_expand(self, node):
+        moves = node.board.get_possible_moves()
+        for move in moves:
+            if move not in node.tried_moves:
+                new_board = node.board.clone()
+                player_to_move = node.player_id if node.move is None else (3 - node.player_id)
+                new_board.place_piece(move[0], move[1], player_to_move)
+                
+                child = MCTSNode(
+                    board=new_board,
+                    parent=node,
+                    move=move,
+                    player_id=3 - player_to_move
+                )
+                node.add_child(child, move)
+                return child
+        return node
+    
+    def _mcts_simulate(self, node):
+        current_board = node.board.clone()
+        current_player = node.player_id
+        
+        while not current_board.check_connection(1) and not current_board.check_connection(2):
+            possible_moves = current_board.get_possible_moves()
+            if not possible_moves:
+                break
+            
+            move = random.choice(possible_moves)
+            current_board.place_piece(move[0], move[1], current_player)
+            current_player = 3 - current_player
+        
+        if current_board.check_connection(self.player_id):
+            return 1
+        elif current_board.check_connection(self.opponent_id):
+            return -1
+        else:
+            return 0
+        
+    def _mcts_backpropagate(self, node, result):
+        while node is not None:
+            node.visits += 1
+            if node.player_id == self.player_id:
+                node.wins += result
+            else:
+                node.wins -= result
+            node = node.parent
+
+    def _reuse_tree(self, old_root, current_board):
+        # Este método busca en los hijos de old_root el nodo que coincide
+        # con el estado actual (current_board). Si se encuentra, se retorna ese subárbol;
+        # si no, se reinicia el árbol.
+        for child in old_root.children:
+            # Aquí puedes comparar de forma simple, por ejemplo, comparando la matriz del tablero:
+            if child.board.board == current_board.board:
+                return child
+        return MCTSNode(board=current_board.clone(), parent=None, move=None, player_id=self.player_id)
+
+
+class IAPlayer2(Player):
+    def __init__(self, player_id: int, time_limit: float = 3.1, method: str = "mcts"):
         """
         Inicializa el jugador IA.
         
