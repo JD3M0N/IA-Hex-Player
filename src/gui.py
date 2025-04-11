@@ -167,7 +167,7 @@ class HexGUI:
             self.window.destroy()
             return
         try:
-            move = current_player.play(self.board.board, moves)
+            move = current_player.play(self.board, moves)
         except NotImplementedError:
             messagebox.showinfo("Información", "La IA aún no está implementada.")
             return
