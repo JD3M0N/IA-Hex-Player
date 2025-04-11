@@ -14,23 +14,14 @@
 - **Detalles de implementación**:
   1. El tablero se modela como una matrix de NxN:
   2. El primer jugador tiene `id = 1` y el segundo `id = 2`
-  3. El sistema que se utiliza para modelación de adyacencias es `even-r` donde:
-       - Para filas pares (i par) los adyacentes son:
-            - (i, j - 1) → Izquierda
-            - (i, j + 1) → Derecha
-            - (i - 1, j) → Arriba
-            - (i + 1, j) → Abajo
-            - (i - 1, j + 1) → Arriba-Derecha
-            - (i + 1, j + 1) → Abajo-Derecha
-
-        - Para filas impares (i impar) los adyacentes son:
-            - (i, j - 1) → Izquierda
-            - (i, j + 1) → Derecha
-            - (i - 1, j) → Arriba
-            - (i + 1, j) → Abajo
-            - (i - 1, j - 1) → Arriba-Izquierda
-            - (i + 1, j - 1) → Abajo-Izquierda
-  
+  3. El sistema que se utiliza para modelación de adyacencias para cualquier sea i,j
+direcciones = [
+    (0, -1),   # Izquierda
+    (0, 1),    # Derecha
+    (-1, 0),   # Arriba
+    (1, 0),    # Abajo
+    (-1, 1),   # Arriba derecha
+    (1, -1)    # Abajo izquierda
 ---
 
 ## 🛠️ Requerimientos del Proyecto
