@@ -1,38 +1,61 @@
-# src/player.py
-
-from typing import Tuple
-from .board import HexBoard
-
 class Player:
-    """
-    Clase base para un jugador.
-    """
-
     def __init__(self, player_id: int):
+        """
+        Inicializa la clase base Player.
+        
+        :param player_id: Identificador del jugador (1 o 2).
+        """
         self.player_id = player_id
 
-    def play(self, board: HexBoard) -> Tuple[int, int]:
+    def play(self, board, possible_moves) -> tuple:
         """
-        Método abstracto a implementar en subclases.
+        Método abstracto que debe implementar cada jugador.
+        
+        :param board: Matriz NxN que representa el tablero actual.
+        :param possible_moves: Lista de tuplas (fila, columna) con movimientos válidos.
+        :return: Tupla (fila, columna) con la jugada seleccionada.
         """
         raise NotImplementedError("¡Implementa este método!")
 
 
 class ManualPlayer(Player):
-    """
-    Jugador manual que solicita la jugada al usuario mediante la entrada por consola.
-    """
+    def play(self, board, possible_moves) -> tuple:
+        """
+        Permite al usuario seleccionar manualmente la jugada.
+        Muestra el tablero actual y la lista de movimientos posibles. 
+        Se solicita ingresar la fila y la columna, validando la entrada.
 
-    def play(self, board: HexBoard) -> Tuple[int, int]:
+        :param board: Matriz NxN que representa el tablero actual.
+        :param possible_moves: Lista de jugadas válidas como tuplas (fila, columna).
+        :return: Tupla (fila, columna) seleccionada manualmente.
+        """
+        print("\n--- Jugada Manual ---")
+        print("Tablero actual:")
+        for row in board:
+            print(" ".join(str(cell) for cell in row))
+        
+        print("\nMovimientos posibles:", possible_moves)
+
         while True:
             try:
-                entrada = input(f"Jugador {self.player_id}, ingresa tu jugada (fila,columna): ")
-                # Se elimina espacios y se separa por coma.
-                row_str, col_str = entrada.replace(" ", "").split(",")
-                row, col = int(row_str), int(col_str)
-                if (row, col) in board.get_possible_moves():
+                row = int(input("Ingresa la fila de la jugada: "))
+                col = int(input("Ingresa la columna de la jugada: "))
+                if (row, col) in possible_moves:
                     return (row, col)
                 else:
-                    print("Movimiento inválido o casilla ocupada. Intenta de nuevo.")
-            except Exception:
-                print("Entrada no válida. Por favor, ingresa dos números separados por coma.")
+                    print("Movimiento no válido. Por favor, ingresa un movimiento de la lista.")
+            except ValueError:
+                print("Entrada inválida. Por favor, ingresa números enteros.")
+
+
+class IAPlayer(Player):
+    def play(self, board, possible_moves) -> tuple:
+        """
+        Este método está destinado a implementar la estrategia de IA para decidir la jugada.
+        Por el momento, se lanza un error indicando que aún no está implementado.
+        
+        :param board: Matriz NxN que representa el tablero actual.
+        :param possible_moves: Lista de jugadas válidas como tuplas (fila, columna).
+        :return: Tupla (fila, columna) con la jugada seleccionada.
+        """
+        raise NotImplementedError("El jugador IA aún no está implementado.")

@@ -1,60 +1,39 @@
-# src/board.py
-
-from typing import List, Tuple
-
 class HexBoard:
-    """
-    Clase que representa el tablero del juego HEX.
-    """
-
     def __init__(self, size: int):
         """
-        Inicializa el tablero de tamaño NxN.
-        :param size: Dimensión del tablero
+        Inicializa el tablero NxN.
+        :param size: Tamaño N del tablero.
         """
-        self.size: int = size
-        self.board: List[List[int]] = [[0 for _ in range(size)] for _ in range(size)]
-
-    def print_board(self) -> None:
+        self.size = size
+        self.board = [[0 for _ in range(size)] for _ in range(size)]
+    
+    def clone(self) -> "HexBoard":
         """
-        Imprime el tablero en consola con formato hexagonal.
-        Las celdas vacías se muestran con ".", 
-        el jugador 1 con "🔴" y el jugador 2 con "🔵".
+        Retorna una copia profunda del tablero.
+        :return: Una nueva instancia de HexBoard con el estado actual del tablero.
         """
-        for i in range(self.size):
-            # Se añade espaciado para simular el efecto de tablero hexagonal.
-            print(" " * i, end="")
-            for j in range(self.size):
-                cell = self.board[i][j]
-                if cell == 0:
-                    symbol = "."
-                elif cell == 1:
-                    symbol = "🔴"
-                elif cell == 2:
-                    symbol = "🔵"
-                else:
-                    symbol = "?"
-                print(symbol, end=" ")
-            print()  # Salto de línea
+        new_board = HexBoard(self.size)
+        # Copia profunda de la matriz
+        new_board.board = [row[:] for row in self.board]
+        return new_board
 
     def place_piece(self, row: int, col: int, player_id: int) -> bool:
         """
-        Coloca la ficha del jugador en la posición indicada si la casilla está vacía.
-        :param row: Fila donde colocar la ficha
-        :param col: Columna donde colocar la ficha
-        :param player_id: Identificador del jugador (1 o 2)
-        :return: True si se coloca la ficha; False en otro caso.
+        Coloca una ficha en la posición (row, col) si la casilla está vacía.
+        :param row: Índice de la fila.
+        :param col: Índice de la columna.
+        :param player_id: Identificador del jugador (1 o 2).
+        :return: True si la jugada es válida y se realizó la colocación, False de lo contrario.
         """
-        if 0 <= row < self.size and 0 <= col < self.size:
-            if self.board[row][col] == 0:
-                self.board[row][col] = player_id
-                return True
-        return False
+        if self.board[row][col] != 0:
+            return False
+        self.board[row][col] = player_id
+        return True
 
-    def get_possible_moves(self) -> List[Tuple[int, int]]:
+    def get_possible_moves(self) -> list:
         """
-        Retorna una lista de todas las posiciones vacías en el tablero.
-        :return: Lista de tuplas (fila, columna)
+        Obtiene la lista de movimientos válidos (casillas vacías).
+        :return: Lista de tuplas (fila, columna) de casillas vacías.
         """
         moves = []
         for i in range(self.size):
@@ -63,18 +42,37 @@ class HexBoard:
                     moves.append((i, j))
         return moves
 
-    def get_neighbors(self, row: int, col: int) -> List[Tuple[int, int]]:
+    def _get_neighbors(self, row: int, col: int) -> list:
         """
-        Retorna las celdas vecinas de (row, col) según el sistema "even-r" (filas pares/impares).
-        :param row: Fila de la celda
-        :param col: Columna de la celda
-        :return: Lista de celdas vecinas válidas
+        Función auxiliar para obtener los vecinos válidos de una casilla (row, col)
+        según el sistema even-r:
+          - Filas pares (row % 2 == 0): vecinos izquierda, derecha, arriba, abajo,
+            arriba-derecha y abajo-derecha.
+          - Filas impares: vecinos izquierda, derecha, arriba, abajo,
+            arriba-izquierda y abajo-izquierda.
+        :param row: Índice de la fila.
+        :param col: Índice de la columna.
+        :return: Lista de vecinos (fila, columna) que están dentro de los límites del tablero.
         """
+        if row % 2 == 0:
+            offsets = [
+                (0, -1),   # Izquierda
+                (0, 1),    # Derecha
+                (-1, 0),   # Arriba
+                (1, 0),    # Abajo
+                (-1, 1),   # Arriba-Derecha
+                (1, 1)     # Abajo-Derecha
+            ]
+        else:
+            offsets = [
+                (0, -1),   # Izquierda
+                (0, 1),    # Derecha
+                (-1, 0),   # Arriba
+                (1, 0),    # Abajo
+                (-1, -1),  # Arriba-Izquierda
+                (1, -1)    # Abajo-Izquierda
+            ]
         neighbors = []
-        if row % 2 == 0:  # Filas pares
-            offsets = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, 1), (1, 1)]
-        else:  # Filas impares
-            offsets = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (1, -1)]
         for dr, dc in offsets:
             r, c = row + dr, col + dc
             if 0 <= r < self.size and 0 <= c < self.size:
@@ -83,49 +81,46 @@ class HexBoard:
 
     def check_connection(self, player_id: int) -> bool:
         """
-        Verifica si el jugador ha conectado sus dos lados:
-          - Jugador 1 (ID 1): conecta la columna 0 con la columna final.
-          - Jugador 2 (ID 2): conecta la fila 0 con la última fila.
-        Se utiliza una búsqueda en profundidad (DFS) para verificar la conexión.
+        Verifica si el jugador con `player_id` ha conectado sus dos lados.
+          - Jugador 1 (id = 1): Conecta columna 0 con columna N-1.
+          - Jugador 2 (id = 2): Conecta fila 0 con fila N-1.
+        Se utiliza una búsqueda en profundidad (DFS) para explorar el tablero.
         
-        :param player_id: Identificador del jugador
-        :return: True si el jugador gana, False de lo contrario.
+        :param player_id: Identificador del jugador (1 o 2).
+        :return: True si se encuentra una conexión válida, False de lo contrario.
         """
-        visited = [[False] * self.size for _ in range(self.size)]
+        visited = set()
         stack = []
-        
+
         if player_id == 1:
-            # Para jugador 1, iniciamos en todas las celdas de la primera columna que tengan su ficha.
+            # Inicia desde todas las celdas de la columna izquierda con ficha del jugador 1.
             for i in range(self.size):
-                if self.board[i][0] == player_id:
+                if self.board[i][0] == 1:
                     stack.append((i, 0))
-                    visited[i][0] = True
-            target_col = self.size - 1
-            while stack:
-                r, c = stack.pop()
-                if c == target_col:
-                    return True
-                for nr, nc in self.get_neighbors(r, c):
-                    if not visited[nr][nc] and self.board[nr][nc] == player_id:
-                        visited[nr][nc] = True
-                        stack.append((nr, nc))
-            return False
+                    visited.add((i, 0))
+            # Condición de victoria: llegar a la columna derecha.
+            target_condition = lambda pos: pos[1] == self.size - 1
 
         elif player_id == 2:
-            # Para jugador 2, iniciamos en todas las celdas de la primera fila con su ficha.
+            # Inicia desde todas las celdas de la fila superior con ficha del jugador 2.
             for j in range(self.size):
-                if self.board[0][j] == player_id:
+                if self.board[0][j] == 2:
                     stack.append((0, j))
-                    visited[0][j] = True
-            target_row = self.size - 1
-            while stack:
-                r, c = stack.pop()
-                if r == target_row:
-                    return True
-                for nr, nc in self.get_neighbors(r, c):
-                    if not visited[nr][nc] and self.board[nr][nc] == player_id:
-                        visited[nr][nc] = True
-                        stack.append((nr, nc))
+                    visited.add((0, j))
+            # Condición de victoria: llegar a la fila inferior.
+            target_condition = lambda pos: pos[0] == self.size - 1
+
+        else:
+            # Si el player_id no es 1 o 2, retorna False.
             return False
 
+        # Búsqueda en profundidad (DFS)
+        while stack:
+            current = stack.pop()
+            if target_condition(current):
+                return True
+            for neighbor in self._get_neighbors(current[0], current[1]):
+                if neighbor not in visited and self.board[neighbor[0]][neighbor[1]] == player_id:
+                    visited.add(neighbor)
+                    stack.append(neighbor)
         return False
